@@ -34,19 +34,19 @@ public class Main {
 
         sc.setLogLevel("ERROR");
 
-        startTime();
+        //startTime();
         JavaRDD<String> rddBooks = spark.sparkContext().textFile("src/main/resources/books_cleaned.csv", 12).toJavaRDD();
-        analyzeBooks(rddBooks);
-        showEndTime();
+        //analyzeBooks(rddBooks);
+        //showEndTime();
 
-        startTime();
-        JavaRDD<String> rddMovies = spark.sparkContext().textFile("src/main/resources/movies_cleaned.csv", 12).toJavaRDD();
-        analyzeMovies(rddMovies);
-        showEndTime();
+        //startTime();
+        JavaRDD<String> rddMovies = spark.sparkContext().textFile("src/main/resources/movies_cleaned.csv", 1).toJavaRDD();
+        //analyzeMovies(rddMovies);
+        //showEndTime();
 
         //getAvgTime(50, "book", rddBooks);
 
-        //getAvgTime(5, "movie", rddMovies);
+        getAvgTime(50, "movie", rddMovies);
 
         long totalTimeEnd = System.nanoTime();
         double totalExecutionTime = (totalTimeEnd - totalTimeStart) / 1e9;
@@ -113,9 +113,10 @@ public class Main {
                 String review_id = parts[2];
                 double reviewScore = Double.parseDouble(parts[3]);
                 String date = parts[4];
-                String genre = parts[5];
+                ArrayList<String> genres = new ArrayList<>();
+                genres.add(parts[5]);
 
-                reviews.add(new Review(media_id, title, review_id, reviewScore, date, genre));
+                reviews.add(new Review(media_id, title, review_id, reviewScore, date, genres));
             }
             return reviews.iterator();
         });
@@ -128,8 +129,6 @@ public class Main {
         String moviesheader = movies.first().trim();
         JavaRDD<String> rddMovies = movies.filter(line -> !line.trim().equals(moviesheader));
 
-        //System.out.println("First element: " + movies.first());
-
         startTime();
 
         JavaRDD<Review> movie_reviews = rddMovies.mapPartitions(movie -> {
@@ -137,7 +136,8 @@ public class Main {
             List<Review> reviews = new ArrayList<>();
             while (movie.hasNext()) {
                 String[] parts = movie.next().split(",");
-                if (parts.length != 6) continue;
+                //if (parts.length > 5) continue;
+
                 String media_id = parts[0];
                 String review_id = parts[1];
                 String date = parts[2];
@@ -150,9 +150,18 @@ public class Main {
                     continue;
                 }
                 String title = parts[4];
-                String genre = parts[5];
 
-                reviews.add(new Review(media_id, title, review_id, reviewScore, date, genre));
+                ArrayList<String> genres = new ArrayList<>();
+                genres.add(parts[5]);
+
+                if (parts.length > 6) {
+                    int n = 1;
+                    while (5+n < parts.length) {
+                        genres.add(parts[5+n]);
+                        n++;
+                    }
+                }
+                reviews.add(new Review(media_id, title, review_id, reviewScore, date, genres));
             }
             return reviews.iterator();
         });
@@ -161,8 +170,10 @@ public class Main {
     }
 
     public static void getHighestGenre(JavaRDD<Review> reviews, String moviesOrBooks) {
+
         JavaPairRDD<String, Tuple2<Double, Integer>> ratingsAndCounts = reviews.mapToPair(review ->
-                new Tuple2<>(review.getGenre(), new Tuple2<>(review.getReviewScore(), 1)));
+                new Tuple2<>(review.getGenre(), new Tuple2<>(review.getReviewScore(), 1))
+        );
 
         JavaPairRDD<String, Tuple2<Double, Integer>> avgRatingsAndCount = ratingsAndCounts.combineByKey(
                 value -> value,
@@ -171,7 +182,8 @@ public class Main {
         );
 
         JavaPairRDD<String, Double> avgRatings = avgRatingsAndCount.mapValues(value ->
-                value._1() / value._2());
+                value._1() / value._2()
+        );
 
         JavaPairRDD<String, Integer> reviewCounts = avgRatingsAndCount.mapValues(Tuple2::_2);
 
@@ -214,9 +226,9 @@ public class Main {
         private final double reviewScore;
         private final String genre;
 
-        public Review(String media_id, String title, String review_id, double reviewScore, String reviewDate, String genre) {
+        public Review(String media_id, String title, String review_id, double reviewScore, String reviewDate, ArrayList<String> genre) {
             this.reviewScore = reviewScore;
-            this.genre = genre;
+            this.genre = String.valueOf(genre);
         }
 
         public String getGenre() {
