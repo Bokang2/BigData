@@ -103,6 +103,7 @@ public class Main {
 
         startTime = System.nanoTime();
 
+        // format the data into an RDD
         JavaRDD<Review> book_reviews = rddbooks.mapPartitions(book -> {
             List<Review> reviews = new ArrayList<>();
             while (book.hasNext()) {
@@ -133,6 +134,7 @@ public class Main {
 
         JavaRDD<Review> movie_reviews = rddMovies.mapPartitions(movie -> {
 
+            // format data into an RDD
             List<Review> reviews = new ArrayList<>();
             while (movie.hasNext()) {
                 String[] parts = movie.next().split(",");
@@ -142,7 +144,7 @@ public class Main {
                 String review_id = parts[1];
                 String date = parts[2];
                 double reviewScore = 0.0;
-                try {
+                try { // handle if review score is 0
                     if (!parts[3].isEmpty()) {
                         reviewScore = Double.parseDouble(parts[3]);
                     }
@@ -151,6 +153,8 @@ public class Main {
                 }
                 String title = parts[4];
 
+                // in the movie dataset the genres have multiple entries
+                // this code combines all the entries into one using array lists
                 ArrayList<String> genres = new ArrayList<>();
                 genres.add(parts[5]);
 
@@ -171,16 +175,19 @@ public class Main {
 
     public static void getHighestGenre(JavaRDD<Review> reviews, String moviesOrBooks) {
 
+        // this is the mapping part, it creates JavaPairRDDs in the format (genre, (score, review count))
         JavaPairRDD<String, Tuple2<Double, Integer>> ratingsAndCounts = reviews.mapToPair(review ->
                 new Tuple2<>(review.getGenre(), new Tuple2<>(review.getReviewScore(), 1))
         );
 
+        // this is where the data is reduced by key which is genre
         JavaPairRDD<String, Tuple2<Double, Integer>> avgRatingsAndCount = ratingsAndCounts.combineByKey(
                 value -> value,
                 (acc, value) -> new Tuple2<>(acc._1() + value._1(), acc._2() + value._2()),
                 (acc1, acc2) -> new Tuple2<>(acc1._1() + acc2._1(), acc1._2() + acc2._2())
         );
 
+        // get the average ratings
         JavaPairRDD<String, Double> avgRatings = avgRatingsAndCount.mapValues(value ->
                 value._1() / value._2()
         );
@@ -189,16 +196,19 @@ public class Main {
 
         JavaPairRDD<String, Tuple2<Double, Integer>> avgRatingsWithCount = avgRatings.join(reviewCounts);
 
+        // this sorts by number of ratings in descending order, so highest number of ratings first
         List<Map.Entry<String, Tuple2<Double, Integer>>> ratingCountSorted = avgRatingsWithCount.collectAsMap().entrySet().stream()
                 .sorted((entry1, entry2) -> Integer.compare(entry2.getValue()._2(), entry1.getValue()._2()))
                 .limit(50)
                 .toList();
 
+        // the previous set is sorted again but this time by rating scores in descending order
         List<Map.Entry<String, Tuple2<Double, Integer>>> sorted = ratingCountSorted.stream()
                 .sorted((entry1, entry2) -> Double.compare(entry2.getValue()._1(), entry1.getValue()._1()))
                 .limit(10)
                 .toList();
 
+        // print results
         if (!avgCheck) {
             System.out.println("\n*****************************************************************************");
             System.out.println("Top 10 " + moviesOrBooks + " Genres:");
